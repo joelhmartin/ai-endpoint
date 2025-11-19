@@ -1,0 +1,11 @@
+steps:
+  - name: node:18
+    entrypoint: npm
+    args: ["install"]
+  - name: node:18
+    entrypoint: npm
+    args: ["run", "build"]
+  - name: gcr.io/cloud-builders/docker
+    args: ["build", "-t", "$IMAGE_NAME", "."]
+images:
+  - "$IMAGE_NAME"
