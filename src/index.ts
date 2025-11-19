@@ -15,5 +15,10 @@ app.post("/transcript", handleTranscript);
 
 app.get("/healthz", (req, res) => res.json({ ok: true }));
 
+app.use((req, res) => {
+  console.log("[CHAT API] Unknown route", req.method, req.path);
+  res.status(404).json({ error: "Not found" });
+});
+
 const port = process.env.PORT || 8080;
 app.listen(port, () => console.log("Cloud Run backend running on port", port));
