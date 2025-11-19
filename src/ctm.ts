@@ -49,10 +49,18 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
       "Content-Type": "application/json"
     }
   });
+  const activityId = response.data?.id || null;
+
+  console.log("[ctm] lead activity", {
+    clientId,
+    sessionId: args.sessionId,
+    status: response.status,
+    activityId
+  });
 
   return {
     ok: true,
-    callIdToken: response.data?.id || null
+    callIdToken: activityId
   };
 }
 
@@ -84,6 +92,10 @@ export async function updateChatTranscript(clientId: string, transcript: Transcr
       Authorization: authHeader,
       "Content-Type": "application/json"
     }
+  });
+  console.log("[ctm] transcript activity", {
+    clientId,
+    sessionId: transcript.sessionId
   });
 
   return { ok: true };
