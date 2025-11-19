@@ -1,8 +1,14 @@
 import axios from "axios";
+import { Request, Response } from "express";
 import { ChatRequest } from "./types";
 import { env } from "./env";
 
-export async function handleChat(req, res) {
+type ChatRequestBody = ChatRequest;
+
+export async function handleChat(
+  req: Request<unknown, unknown, ChatRequestBody>,
+  res: Response
+) {
   try {
     const body = req.body as ChatRequest;
 

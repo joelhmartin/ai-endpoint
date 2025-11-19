@@ -1,8 +1,14 @@
+import { Request, Response } from "express";
 import { TranscriptPayload } from "./types";
 import { env } from "./env";
 import { sendTranscriptToCTM } from "./ctm";
 
-export async function handleTranscript(req, res) {
+type TranscriptRequestBody = TranscriptPayload;
+
+export async function handleTranscript(
+  req: Request<unknown, unknown, TranscriptRequestBody>,
+  res: Response
+) {
   try {
     const body = req.body as TranscriptPayload;
 
