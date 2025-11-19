@@ -6,7 +6,7 @@ export async function handleChat(req, res) {
   try {
     const body = req.body as ChatRequest;
 
-    // Combine historical messages with the latest user input
+    // Combine historical messages with the latest user input.
     const messages = [...body.messages, body.latestMessage];
 
     const openaiRes = await axios.post(
