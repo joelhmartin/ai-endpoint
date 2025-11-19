@@ -1,0 +1,17 @@
+"use strict";
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
+Object.defineProperty(exports, "__esModule", { value: true });
+const express_1 = __importDefault(require("express"));
+const cors_1 = __importDefault(require("cors"));
+const chat_1 = require("./chat");
+const transcript_1 = require("./transcript");
+const app = (0, express_1.default)();
+app.use((0, cors_1.default)());
+app.use(express_1.default.json({ limit: "2mb" }));
+app.post("/chat", chat_1.handleChat);
+app.post("/transcript", transcript_1.handleTranscript);
+app.get("/healthz", (req, res) => res.json({ ok: true }));
+const port = process.env.PORT || 8080;
+app.listen(port, () => console.log("Cloud Run backend running on port", port));

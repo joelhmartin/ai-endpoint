@@ -5,8 +5,15 @@ export interface ChatRequest {
   clientId: string;
 }
 
+export interface TranscriptTurn {
+  role: string;
+  content: string;
+  timestamp?: string;
+}
+
 export interface TranscriptPayload {
-  transcript: any;
+  forwardToken: string;
   clientId: string;
-  token: string;
+  message: string;
+  history?: TranscriptTurn[];
 }

@@ -1,22 +1,16 @@
 import axios from "axios";
-import { env } from "./env";
-import { CTMClients } from "./ctmClients";
 
-export async function sendTranscriptToCTM(clientId: string, transcript: any) {
-  const clientAuth = process.env[`CTM_AUTH_${clientId}`] || CTMClients.getAuthHeader(clientId);
+const CTM_BASE_URL = "https://api.calltrackingmetrics.com/api/v1/accounts";
 
-  if (!clientAuth) {
-    throw new Error("Missing CTM credentials for client " + clientId);
-  }
+export function buildCTMWebhook(accountId: string): string {
+  return `${CTM_BASE_URL}/${accountId}/activities`;
+}
 
-  return axios.post(
-    `${env.CTM_BASE_URL}/${clientId}/transcripts`,
-    { transcript },
-    {
-      headers: {
-        Authorization: clientAuth,
-        "Content-Type": "application/json"
-      }
+export async function postTranscriptToCTM(url: string, authHeader: string, payload: unknown) {
+  return axios.post(url, payload, {
+    headers: {
+      Authorization: authHeader,
+      "Content-Type": "application/json"
     }
-  );
+  });
 }

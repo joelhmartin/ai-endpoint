@@ -18,7 +18,7 @@ export async function handleChat(
     const openaiRes = await axios.post(
       "https://api.openai.com/v1/chat/completions",
       {
-        model: "gpt-4o-mini",
+        model: env.MODEL_NAME,
         messages: messages
       },
       {
@@ -33,7 +33,8 @@ export async function handleChat(
 
     res.json({ reply });
   } catch (err: any) {
-    console.error("CHAT ERROR", err.response?.data || err.message);
+    const status = err.response?.status;
+    console.error("CHAT ERROR", status || err.message);
     res.status(500).json({ error: "Chat error" });
   }
 }

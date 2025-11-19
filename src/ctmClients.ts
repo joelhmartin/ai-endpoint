@@ -11,7 +11,7 @@ export interface CTMClient {
 }
 
 /** Map of CTM account IDs → { name, auth } */
-const CLIENTS: Record<string, CTMClient> = {
+const CLIENTS_MAP: Record<string, CTMClient> = {
   "267834": {
     name: "Anchor Corps",
     auth: "Basic YTI2NzgzNGQwOTA5ZDk1YTVjYjZhMjhmNGI5MDY4Nzg2M2FmNDE5YTpkN2NlYjRiY2M0ZGM1ZWMxNWQ3MzFkMWM3MDY1ZjE5YjllZjM="
@@ -26,7 +26,7 @@ const CLIENTS: Record<string, CTMClient> = {
   },
   "412986": {
     name: "TMJ SoCal",
-    auth: "YTQxMjk4NmQzYWYzMGUwNGVlNTgxM2Q5MWFhNTNhMzk4NWIwYWU3MTo5OTA0MzIzMTQwOTE4MDFkZWY5M2VlMjlmZWQ2NTdiMDI2MjQ="
+    auth: "Basic YTQxMjk4NmQzYWYzMGUwNGVlNTgxM2Q5MWFhNTNhMzk4NWIwYWU3MTo5OTA0MzIzMTQwOTE4MDFkZWY5M2VlMjlmZWQ2NTdiMDI2MjQ="
   },
   "431875": {
     name: "TMJ Therapy Sleep Solution",
@@ -86,67 +86,25 @@ const CLIENTS: Record<string, CTMClient> = {
   }
 };
 
-const KEY = "CTM_CLIENTS";
+export const CLIENTS: Record<string, CTMClient> = CLIENTS_MAP;
 
-let cachedClients: Record<string, CTMClient> | null = null;
-
-function loadMap(): Record<string, CTMClient> {
-  if (!cachedClients) {
-    cachedClients = { ...CLIENTS };
-  }
-  return cachedClients;
+export function getClient(accountId: string): CTMClient | null {
+  return CLIENTS[accountId] || null;
 }
 
-function persist(map: Record<string, CTMClient>): void {
-  cachedClients = map;
-}
-
-function getClient(accountId: string): CTMClient | null {
-  const cfg = loadMap();
-  return cfg[accountId] || null;
-}
-
-function getAuthHeader(accountId: string): string {
+export function getAuthHeader(accountId: string): string {
   const client = getClient(accountId);
   if (!client || !client.auth) return "";
-  return client.auth.startsWith("Basic ") ? client.auth : `Basic ${client.auth}`;
+  return client.auth;
 }
 
-function getName(accountId: string): string {
+export function getName(accountId: string): string {
   const client = getClient(accountId);
   return client?.name || "";
 }
 
-function setClientsMap(jsonString: string) {
-  const parsed = JSON.parse(jsonString) as Record<string, CTMClient>;
-  persist(parsed);
-  return { ok: true, key: KEY };
-}
-
-function upsertClient(accountId: string, name: string, auth: string) {
-  const map = { ...loadMap(), [accountId]: { name: name || "", auth: auth || "" } };
-  persist(map);
-  return { ok: true, accountId };
-}
-
-function deleteClient(accountId: string) {
-  const map = { ...loadMap() };
-  delete map[accountId];
-  persist(map);
-  return { ok: true, accountId };
-}
-
-function _loadMap() {
-  return loadMap();
-}
-
 export const CTMClients = {
-  KEY,
   getClient,
   getAuthHeader,
-  getName,
-  setClientsMap,
-  upsertClient,
-  deleteClient,
-  _loadMap
+  getName
 };

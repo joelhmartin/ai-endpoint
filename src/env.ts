@@ -1,8 +1,8 @@
 export const env = {
   OPENAI_API_KEY: process.env.OPENAI_API_KEY || "",
   FORWARD_TOKEN: process.env.FORWARD_TOKEN || "",
-  CTM_BASE_URL:
-    process.env.CTM_BASE_URL || "https://api.calltrackingmetrics.com/api/v1/accounts"
+  MODEL_NAME: process.env.MODEL_NAME || "gpt-4o-mini",
+  LOG_LEVEL: process.env.LOG_LEVEL || "info"
 };
 
 if (!env.OPENAI_API_KEY) throw new Error("OPENAI_API_KEY missing");
