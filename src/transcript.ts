@@ -1,47 +1,39 @@
 import { Request, Response } from "express";
-import { TranscriptPayload, TranscriptTurn } from "./types";
+import { TranscriptPayload } from "./types";
 import { env } from "./env";
-import { CLIENTS } from "./ctmClients";
-import { buildCTMWebhook, postTranscriptToCTM } from "./ctm";
+import { updateChatTranscript } from "./ctm";
 
 type TranscriptRequestBody = TranscriptPayload;
-
-function compileTranscript(history: TranscriptTurn[] = [], latestMessage: string) {
-  const entries = [...history];
-  if (latestMessage) {
-    entries.push({ role: "user", content: latestMessage });
-  }
-
-  return { transcript: entries };
-}
 
 export async function handleTranscript(
   req: Request<unknown, unknown, TranscriptRequestBody>,
   res: Response
 ) {
+  const body = req.body as TranscriptPayload;
+
+  if (!body || !body.clientId || !body.transcript) {
+    return res.status(400).json({ error: "Missing clientId or transcript" });
+  }
+
+  if (body.token !== env.FORWARD_TOKEN) {
+    return res.status(403).json({ error: "Invalid token" });
+  }
+
+  const transcript = body.transcript;
+  if (!transcript.sessionId || !Array.isArray(transcript.messages) || transcript.messages.length === 0) {
+    return res.status(400).json({ error: "Empty transcript" });
+  }
+
   try {
-    const body = req.body as TranscriptPayload;
-
-    if (body.forwardToken !== env.FORWARD_TOKEN) {
-      return res.status(401).json({ error: "invalid token" });
-    }
-
-    const client = CLIENTS[body.clientId];
-    if (!client) {
-      return res.status(404).json({ error: "unknown clientId" });
-    }
-
-    const ctmUrl = buildCTMWebhook(body.clientId);
-    const transcriptPayload = compileTranscript(body.history || [], body.message);
-
-    console.log("Received request for client", body.clientId);
-    await postTranscriptToCTM(ctmUrl, client.auth, transcriptPayload);
-    console.log("CTM POST success", body.clientId);
-
-    res.json({ ok: true });
+    await updateChatTranscript(body.clientId, transcript);
+    return res.json({ ok: true });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "Unknown error";
-    console.error("TRANSCRIPT ERROR", message);
-    res.status(500).json({ error: "Transcript error" });
+    const message = err instanceof Error ? err.message : "unknown";
+    console.error("[transcript] error", {
+      clientId: body.clientId,
+      sessionId: transcript.sessionId,
+      error: message
+    });
+    return res.status(500).json({ error: "Transcript update failed" });
   }
 }
