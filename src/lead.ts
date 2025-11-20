@@ -47,7 +47,7 @@ export async function handleLead(
         clientId: body.clientId,
         sessionId: body.sessionId,
         trackbackId,
-        transcriptLength: body.transcript?.length || 0
+        transcript: body.transcript
       });
 
       await updateChatTranscript(body.clientId, {

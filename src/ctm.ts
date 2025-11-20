@@ -24,6 +24,43 @@ function buildFormreactorUrl(formreactorId: string): string {
   return `${CTM_API_BASE}/formreactor/${encodeURIComponent(formreactorId)}`;
 }
 
+async function lookupCallId(
+  clientId: string,
+  trackbackId: string,
+  authHeader: string
+): Promise<string | undefined> {
+  const url = `${CTM_API_BASE}/accounts/${clientId}/calls?form.trackback_id=${encodeURIComponent(
+    trackbackId
+  )}`;
+  const response = await axios.get(url, {
+    headers: { Authorization: authHeader }
+  });
+  return response.data?.calls?.[0]?.id || undefined;
+}
+
+async function updateCallCustomTranscript(
+  clientId: string,
+  callId: string,
+  transcript: string,
+  authHeader: string
+) {
+  const url = `${CTM_API_BASE}/accounts/${clientId}/calls/${encodeURIComponent(callId)}/modify`;
+  return axios.post(
+    url,
+    {
+      custom_fields: {
+        chat_transcription: transcript
+      }
+    },
+    {
+      headers: {
+        Authorization: authHeader,
+        "Content-Type": "application/json"
+      }
+    }
+  );
+}
+
 function getClientAuth(clientId: string) {
   const client = CLIENTS[clientId];
   if (!client || !client.auth) {
@@ -58,7 +95,6 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
   payload.set("country_code", "1");
   payload.set("caller_name", args.name);
   payload.set("email", args.email);
-  payload.set("custom_chat_transcription", args.transcript);
 
   const response = await axios.post(url, payload, {
     headers: {
@@ -69,9 +105,15 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
 
   const trackbackId = response.data?.trackback_id || response.data?.id || null;
   if (trackbackId) {
+    let callId: string | undefined = await lookupCallId(clientId, trackbackId, authHeader);
+    if (callId) {
+      await updateCallCustomTranscript(clientId, callId, args.transcript || "", authHeader);
+    }
+
     saveTrackback(args.sessionId, {
       clientId,
       trackbackId,
+      callId,
       createdAt: new Date().toISOString(),
     });
   }
@@ -90,47 +132,32 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
 }
 
 export async function updateChatTranscript(clientId: string, payload: TranscriptUpdateArgs) {
-  const { client, authHeader } = getClientAuth(clientId);
-  const accountId = clientId;
-  const trackbackId = payload.trackbackId || getTrackback(payload.sessionId)?.trackbackId;
+  const { authHeader } = getClientAuth(clientId);
+  const trackInfo = getTrackback(payload.sessionId);
+  const trackbackId = payload.trackbackId || trackInfo?.trackbackId;
 
   if (!trackbackId) {
     throw new Error("Missing trackbackId for transcript update");
   }
 
-  // 1. LOOKUP CALL BY TRACKBACK
-  const lookupUrl = `${CTM_API_BASE}/accounts/${accountId}/calls?form.trackback_id=${encodeURIComponent(trackbackId)}`;
+  let callId = trackInfo?.callId;
+  if (!callId) {
+    callId = await lookupCallId(clientId, trackbackId, authHeader);
+  }
 
-  const lookup = await axios.get(lookupUrl, {
-    headers: { Authorization: authHeader },
-  });
-
-  const callId = lookup.data?.calls?.[0]?.id;
   if (!callId) {
     throw new Error("Could not find call for trackbackId " + trackbackId);
   }
 
-  // 2. UPDATE CALL WITH TRANSCRIPT
-  const modifyUrl = `${CTM_API_BASE}/accounts/${accountId}/calls/${callId}/modify`;
-
-  await axios.post(
-    modifyUrl,
-    {
-      custom_fields: {
-        chat_transcription: payload.transcript,
-      },
-    },
-    {
-      headers: {
-        Authorization: authHeader,
-        "Content-Type": "application/json",
-      },
-    }
-  );
+  await updateCallCustomTranscript(clientId, callId, payload.transcript, authHeader);
 
   clearTrackback(payload.sessionId);
 
-  console.log("[TRANSCRIPT UPDATED]", { clientId, sessionId: payload.sessionId, callId });
+  console.log("[TRANSCRIPT UPDATED]", {
+    clientId,
+    sessionId: payload.sessionId,
+    callId,
+  });
 
   return { ok: true };
 }

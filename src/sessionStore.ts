@@ -1,6 +1,7 @@
 export interface SessionTrackback {
   clientId: string;
   trackbackId: string;
+  callId?: string;
   createdAt: string;
 }
 

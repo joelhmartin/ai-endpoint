@@ -35,7 +35,7 @@ async function handleLead(req, res) {
                 clientId: body.clientId,
                 sessionId: body.sessionId,
                 trackbackId,
-                transcriptLength: body.transcript?.length || 0
+                transcript: body.transcript
             });
             await (0, ctm_1.updateChatTranscript)(body.clientId, {
                 sessionId: body.sessionId,
