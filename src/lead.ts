@@ -43,6 +43,13 @@ export async function handleLead(
         return res.status(400).json({ error: "Missing trackbackId" });
       }
 
+      console.log("[lead] update", {
+        clientId: body.clientId,
+        sessionId: body.sessionId,
+        trackbackId,
+        transcriptLength: body.transcript?.length || 0
+      });
+
       await updateChatTranscript(body.clientId, {
         sessionId: body.sessionId,
         transcript: body.transcript!,
