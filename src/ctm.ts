@@ -104,7 +104,7 @@ export async function updateChatTranscript(clientId: string, transcript: Transcr
 
   if (trackback && trackback.trackbackId) {
     const modifyUrl = `${CTM_API_BASE}/calls/${encodeURIComponent(trackback.trackbackId)}/modify`;
-    const response = await axios.post(
+    const response = await axios.put(
       modifyUrl,
       { custom_chat_transcription: transcriptText },
       {

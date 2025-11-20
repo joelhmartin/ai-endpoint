@@ -85,7 +85,7 @@ async function updateChatTranscript(clientId, transcript) {
     const trackback = (0, sessionStore_1.getTrackback)(transcript.sessionId);
     if (trackback && trackback.trackbackId) {
         const modifyUrl = `${CTM_API_BASE}/calls/${encodeURIComponent(trackback.trackbackId)}/modify`;
-        const response = await axios_1.default.post(modifyUrl, { custom_chat_transcription: transcriptText }, {
+        const response = await axios_1.default.put(modifyUrl, { custom_chat_transcription: transcriptText }, {
             headers: {
                 Authorization: authHeader,
                 "Content-Type": "application/json"
