@@ -9,10 +9,6 @@ const axios_1 = __importDefault(require("axios"));
 const ctmClients_1 = require("./ctmClients");
 const sessionStore_1 = require("./sessionStore");
 const CTM_API_BASE = "https://api.calltrackingmetrics.com/api/v1";
-const CTM_ACCOUNTS_BASE = `${CTM_API_BASE}/accounts`;
-function buildActivitiesUrl(accountId) {
-    return `${CTM_ACCOUNTS_BASE}/${accountId}/activities`;
-}
 function buildFormreactorUrl(formreactorId) {
     return `${CTM_API_BASE}/formreactor/${encodeURIComponent(formreactorId)}`;
 }
@@ -35,14 +31,6 @@ function resolveFormreactorId(clientId, client) {
 }
 function formatPhoneNumber(phone) {
     return (phone || "").replace(/\D/g, "");
-}
-function buildTranscriptString(transcript, practiceName) {
-    return transcript.messages
-        .map(message => {
-        const speaker = message.role === "assistant" ? `${practiceName} Assistant` : "User";
-        return `${message.at} - ${speaker}: ${message.text}`;
-    })
-        .join("\n");
 }
 async function createChatLead(clientId, args) {
     const { client, authHeader } = getClientAuth(clientId);
@@ -76,55 +64,28 @@ async function createChatLead(clientId, args) {
     });
     return {
         ok: true,
-        callIdToken: trackbackId
+        trackbackId
     };
 }
-async function updateChatTranscript(clientId, transcript) {
+async function updateChatTranscript(clientId, payload) {
     const { client, authHeader } = getClientAuth(clientId);
-    const transcriptText = buildTranscriptString(transcript, client.name);
-    const trackback = (0, sessionStore_1.getTrackback)(transcript.sessionId);
-    if (trackback && trackback.trackbackId) {
-        const modifyUrl = `${CTM_API_BASE}/calls/${encodeURIComponent(trackback.trackbackId)}/modify`;
-        const response = await axios_1.default.put(modifyUrl, { custom_chat_transcription: transcriptText }, {
-            headers: {
-                Authorization: authHeader,
-                "Content-Type": "application/json"
-            }
-        });
-        (0, sessionStore_1.clearTrackback)(transcript.sessionId);
-        console.log("[TRANSCRIPT]", {
-            clientId,
-            sessionId: transcript.sessionId,
-            mode: "modify",
-            status: response.status
-        });
-        return { ok: true };
+    const formreactorId = resolveFormreactorId(clientId, client);
+    const trackbackId = payload.trackbackId || (0, sessionStore_1.getTrackback)(payload.sessionId)?.trackbackId;
+    if (!trackbackId) {
+        throw new Error("Missing trackbackId for transcript update");
     }
-    console.warn("[TRANSCRIPT] missing trackback", {
-        clientId,
-        sessionId: transcript.sessionId
-    });
-    const fallbackUrl = buildActivitiesUrl(clientId);
-    const response = await axios_1.default.post(fallbackUrl, {
-        type: "chat_transcript",
-        subject: `Chat transcript ${transcript.sessionId}`,
-        note: transcriptText,
-        metadata: {
-            sessionId: transcript.sessionId,
-            startedAt: transcript.startedAt,
-            endedAt: transcript.endedAt,
-            meta: transcript.meta || {}
-        }
-    }, {
+    const url = `${CTM_API_BASE}/formreactor/${encodeURIComponent(formreactorId)}/${encodeURIComponent(trackbackId)}`;
+    const response = await axios_1.default.post(url, { custom_chat_transcription: payload.transcript }, {
         headers: {
             Authorization: authHeader,
             "Content-Type": "application/json"
         }
     });
+    (0, sessionStore_1.clearTrackback)(payload.sessionId);
     console.log("[TRANSCRIPT]", {
         clientId,
-        sessionId: transcript.sessionId,
-        mode: "activity",
+        sessionId: payload.sessionId,
+        mode: "formreactor",
         status: response.status
     });
     return { ok: true };

@@ -1,10 +1,9 @@
 import axios from "axios";
 import { CLIENTS, CTMClient } from "./ctmClients";
-import { Transcript, LeadPayloadMeta } from "./types";
-import { saveTrackback, getTrackback, clearTrackback } from "./sessionStore";
+import { LeadPayloadMeta } from "./types";
+import { getTrackback, saveTrackback, clearTrackback } from "./sessionStore";
 
 const CTM_API_BASE = "https://api.calltrackingmetrics.com/api/v1";
-const CTM_ACCOUNTS_BASE = `${CTM_API_BASE}/accounts`;
 
 interface CreateLeadArgs {
   sessionId: string;
@@ -15,8 +14,10 @@ interface CreateLeadArgs {
   meta?: LeadPayloadMeta;
 }
 
-function buildActivitiesUrl(accountId: string): string {
-  return `${CTM_ACCOUNTS_BASE}/${accountId}/activities`;
+interface TranscriptUpdateArgs {
+  sessionId: string;
+  transcript: string;
+  trackbackId?: string;
 }
 
 function buildFormreactorUrl(formreactorId: string): string {
@@ -45,15 +46,6 @@ function resolveFormreactorId(clientId: string, client: CTMClient): string {
 
 function formatPhoneNumber(phone: string): string {
   return (phone || "").replace(/\D/g, "");
-}
-
-function buildTranscriptString(transcript: Transcript, practiceName: string): string {
-  return transcript.messages
-    .map(message => {
-      const speaker = message.role === "assistant" ? `${practiceName} Assistant` : "User";
-      return `${message.at} - ${speaker}: ${message.text}`;
-    })
-    .join("\n");
 }
 
 export async function createChatLead(clientId: string, args: CreateLeadArgs) {
@@ -93,56 +85,23 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
 
   return {
     ok: true,
-    callIdToken: trackbackId
+    trackbackId
   };
 }
 
-export async function updateChatTranscript(clientId: string, transcript: Transcript) {
+export async function updateChatTranscript(clientId: string, payload: TranscriptUpdateArgs) {
   const { client, authHeader } = getClientAuth(clientId);
-  const transcriptText = buildTranscriptString(transcript, client.name);
-  const trackback = getTrackback(transcript.sessionId);
+  const formreactorId = resolveFormreactorId(clientId, client);
+  const trackbackId = payload.trackbackId || getTrackback(payload.sessionId)?.trackbackId;
 
-  if (trackback && trackback.trackbackId) {
-    const modifyUrl = `${CTM_API_BASE}/calls/${encodeURIComponent(trackback.trackbackId)}/modify`;
-    const response = await axios.put(
-      modifyUrl,
-      { custom_chat_transcription: transcriptText },
-      {
-        headers: {
-          Authorization: authHeader,
-          "Content-Type": "application/json"
-        }
-      }
-    );
-    clearTrackback(transcript.sessionId);
-    console.log("[TRANSCRIPT]", {
-      clientId,
-      sessionId: transcript.sessionId,
-      mode: "modify",
-      status: response.status
-    });
-    return { ok: true };
+  if (!trackbackId) {
+    throw new Error("Missing trackbackId for transcript update");
   }
 
-  console.warn("[TRANSCRIPT] missing trackback", {
-    clientId,
-    sessionId: transcript.sessionId
-  });
-
-  const fallbackUrl = buildActivitiesUrl(clientId);
+  const url = `${CTM_API_BASE}/formreactor/${encodeURIComponent(formreactorId)}/${encodeURIComponent(trackbackId)}`;
   const response = await axios.post(
-    fallbackUrl,
-    {
-      type: "chat_transcript",
-      subject: `Chat transcript ${transcript.sessionId}`,
-      note: transcriptText,
-      metadata: {
-        sessionId: transcript.sessionId,
-        startedAt: transcript.startedAt,
-        endedAt: transcript.endedAt,
-        meta: transcript.meta || {}
-      }
-    },
+    url,
+    { custom_chat_transcription: payload.transcript },
     {
       headers: {
         Authorization: authHeader,
@@ -150,13 +109,12 @@ export async function updateChatTranscript(clientId: string, transcript: Transcr
       }
     }
   );
-
+  clearTrackback(payload.sessionId);
   console.log("[TRANSCRIPT]", {
     clientId,
-    sessionId: transcript.sessionId,
-    mode: "activity",
+    sessionId: payload.sessionId,
+    mode: "formreactor",
     status: response.status
   });
-
   return { ok: true };
 }
