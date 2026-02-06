@@ -3,6 +3,8 @@ import { GoogleAuth } from "google-auth-library";
 import { Request, Response } from "express";
 import { ChatRequest, ChatMeta } from "./types";
 import { env } from "./env";
+import { hasCorpus, getCorpus } from "./ragCorpusStore";
+import { retrieveContexts } from "./ragApi";
 
 type ChatRequestBody = ChatRequest;
 
@@ -66,7 +68,7 @@ function buildBusinessSystemMessage(meta?: ChatMeta): string {
   return lines.join("\n\n");
 }
 
-function buildMessages(body: ChatRequest): ChatCompletionMessage[] {
+function buildMessages(body: ChatRequest, ragContext?: string): ChatCompletionMessage[] {
   const baseSystem: ChatCompletionMessage = {
     role: "system",
     content:
@@ -78,6 +80,17 @@ function buildMessages(body: ChatRequest): ChatCompletionMessage[] {
     ? ({ role: "system", content: businessSystemText } as ChatCompletionMessage)
     : null;
 
+  const ragSystem: ChatCompletionMessage | null = ragContext
+    ? {
+        role: "system",
+        content:
+          "The following reference information was retrieved from the practice's knowledge base. " +
+          "Use it to answer the patient's question accurately. If the information does not help, " +
+          "you may ignore it. Do not mention that you are using a knowledge base.\n\n" +
+          ragContext,
+      }
+    : null;
+
   const historyMessages: ChatCompletionMessage[] = (body.messages || []).map(message => ({
     role: message.role,
     content: message.content
@@ -85,7 +98,13 @@ function buildMessages(body: ChatRequest): ChatCompletionMessage[] {
 
   const latest = body.latestMessage || { role: "user", content: "" };
 
-  return [baseSystem, ...(businessSystem ? [businessSystem] : []), ...historyMessages, latest];
+  return [
+    baseSystem,
+    ...(businessSystem ? [businessSystem] : []),
+    ...(ragSystem ? [ragSystem] : []),
+    ...historyMessages,
+    latest,
+  ];
 }
 
 export async function handleChat(
@@ -98,7 +117,30 @@ export async function handleChat(
     return res.status(400).json({ error: "missing latestMessage" });
   }
 
-  const messages = buildMessages(body);
+  // ── RAG retrieval (non-fatal) ───────────────────────────────────
+  let ragContext: string | undefined;
+  if (body.clientId && hasCorpus(body.clientId)) {
+    try {
+      const corpus = getCorpus(body.clientId)!;
+      const contexts = await retrieveContexts(
+        corpus.corpusName,
+        body.latestMessage.content,
+        3
+      );
+      const relevant = contexts.filter((c) => c.score > 0.3);
+      if (relevant.length > 0) {
+        ragContext = relevant
+          .map((c) => `[Source: ${c.sourceDisplayName}]\n${c.text}`)
+          .join("\n\n---\n\n");
+        console.log(`[RAG] Injecting ${relevant.length} context(s) for client ${body.clientId}`);
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[RAG] retrieval error for client ${body.clientId} (continuing without):`, msg);
+    }
+  }
+
+  const messages = buildMessages(body, ragContext);
 
   try {
     const systemMessages = messages
