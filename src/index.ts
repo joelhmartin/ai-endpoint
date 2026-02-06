@@ -3,6 +3,7 @@ import cors from "cors";
 
 import { handleChat } from "./chat";
 import { handleLead } from "./lead";
+import { initCTMClients } from "./ctmClients";
 
 const app = express();
 app.use(cors());
@@ -19,4 +20,13 @@ app.use((req, res) => {
 });
 
 const port = process.env.PORT || 8080;
-app.listen(port, () => console.log("Cloud Run backend running on port", port));
+
+(async () => {
+  try {
+    await initCTMClients();
+  } catch (err) {
+    console.error("[CTM] Failed to initialise CTM clients:", err);
+    process.exit(1);
+  }
+  app.listen(port, () => console.log("Cloud Run backend running on port", port));
+})();

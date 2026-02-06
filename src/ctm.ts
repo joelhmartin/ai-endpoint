@@ -1,5 +1,5 @@
 import axios from "axios";
-import { CLIENTS, CTMClient } from "./ctmClients";
+import { getClient, getAuthHeader } from "./ctmClients";
 import { LeadPayloadMeta } from "./types";
 import { getTrackback, saveTrackback, clearTrackback } from "./sessionStore";
 
@@ -62,23 +62,11 @@ async function updateCallCustomTranscript(
 }
 
 function getClientAuth(clientId: string) {
-  const client = CLIENTS[clientId];
-  if (!client || !client.auth) {
+  const client = getClient(clientId);
+  if (!client) {
     throw new Error("No CTM client configured for " + clientId);
   }
-
-  return { client, authHeader: client.auth };
-}
-
-function resolveFormreactorId(clientId: string, client: CTMClient): string {
-  const fromClient = client.formreactorId;
-  const fromEnv = process.env[`CTM_FORMREACTOR_${clientId}`];
-  const defaultEnv = process.env.CTM_FORMREACTOR_ID;
-  const id = fromClient || fromEnv || defaultEnv;
-  if (!id) {
-    throw new Error("Missing CTM formreactor ID for client " + clientId);
-  }
-  return id;
+  return { client, authHeader: getAuthHeader() };
 }
 
 function formatPhoneNumber(phone: string): string {
@@ -87,8 +75,7 @@ function formatPhoneNumber(phone: string): string {
 
 export async function createChatLead(clientId: string, args: CreateLeadArgs) {
   const { client, authHeader } = getClientAuth(clientId);
-  const formreactorId = resolveFormreactorId(clientId, client);
-  const url = buildFormreactorUrl(formreactorId);
+  const url = buildFormreactorUrl(client.formreactorId);
 
   const payload = new URLSearchParams();
   payload.set("phone_number", formatPhoneNumber(args.phone));
