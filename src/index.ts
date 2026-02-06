@@ -11,7 +11,7 @@ app.use(express.json({ limit: "2mb" }));
 app.post("/chat", handleChat);
 app.post("/lead", handleLead);
 
-app.get("/healthz", (req, res) => res.json({ ok: true }));
+app.get("/health", (req, res) => res.json({ ok: true }));
 
 app.use((req, res) => {
   console.log("[CHAT API] Unknown route", req.method, req.path);

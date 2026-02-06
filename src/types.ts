@@ -13,6 +13,7 @@ export interface ChatMeta {
   businessPhone?: string;
   businessEmail?: string;
   context?: string;
+  businessHoursText?: string;
 }
 
 export interface ChatRequest {

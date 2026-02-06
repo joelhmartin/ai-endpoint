@@ -54,8 +54,8 @@ const CLIENTS_MAP = {
     },
     "472670": {
         name: "TMJ NOLA",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJNOLA",
-        formreactorId: "FR_TMJNOLA"
+        auth: "Basic YTQ3MjY3MGQyNmZjMjBhMWU4ZjQ1MmQ4ZDY4ZDBiNDMyMzhjNDc3MzozZDMyMTNlN2RlMzAxZmIyNjBlY2M0YjQwM2I0ZDRhYTgxM2I=",
+        formreactorId: "FRT472ABB2C5B9B141AEBD8435F9615D3D26DDB5C5B06F2E760F3106C4D80BDD3E0"
     },
     "472688": {
         name: "TMJ Arizona",

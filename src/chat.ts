@@ -1,4 +1,5 @@
 import axios from "axios";
+import { GoogleAuth } from "google-auth-library";
 import { Request, Response } from "express";
 import { ChatRequest, ChatMeta } from "./types";
 import { env } from "./env";
@@ -9,6 +10,12 @@ type ChatCompletionMessage = {
   role: "system" | "assistant" | "user";
   content: string;
 };
+
+const auth = new GoogleAuth({
+  scopes: "https://www.googleapis.com/auth/cloud-platform"
+});
+
+const VERTEX_AI_URL = `https://${env.GCP_REGION}-aiplatform.googleapis.com/v1beta1/projects/${env.GCP_PROJECT_ID}/locations/${env.GCP_REGION}/endpoints/openapi/chat/completions`;
 
 function buildBusinessSystemMessage(meta?: ChatMeta): string {
   if (!meta) {
@@ -41,6 +48,17 @@ function buildBusinessSystemMessage(meta?: ChatMeta): string {
     }
   }
 
+  if (meta.businessHoursText) {
+    const hoursText = meta.businessHoursText.trim();
+    if (hoursText) {
+      lines.push(
+        "The office hours are: " +
+          hoursText +
+          ". If patients ask about office hours, days, or when you are open or closed, you must answer using exactly this schedule."
+      );
+    }
+  }
+
   lines.push(
     "Answer as the practice, keep responses concise, do not invent medical advice, and encourage patients to call the office for diagnosis or emergencies."
   );
@@ -48,7 +66,7 @@ function buildBusinessSystemMessage(meta?: ChatMeta): string {
   return lines.join("\n\n");
 }
 
-function buildOpenAIMessages(body: ChatRequest): ChatCompletionMessage[] {
+function buildMessages(body: ChatRequest): ChatCompletionMessage[] {
   const baseSystem: ChatCompletionMessage = {
     role: "system",
     content:
@@ -80,11 +98,28 @@ export async function handleChat(
     return res.status(400).json({ error: "missing latestMessage" });
   }
 
-  const messages = buildOpenAIMessages(body);
+  const messages = buildMessages(body);
 
   try {
-    const openaiRes = await axios.post(
-      "https://api.openai.com/v1/chat/completions",
+    const systemMessages = messages
+      .filter(m => m.role === "system")
+      .map(m => m.content);
+    console.log("[CHAT PROMPT][system]", {
+      clientId: body.clientId,
+      sessionId: body.sessionId,
+      meta: body.meta || {},
+      systemMessages
+    });
+  } catch {
+    // Swallow logging errors to avoid impacting request handling.
+  }
+
+  try {
+    const client = await auth.getClient();
+    const accessToken = await client.getAccessToken();
+
+    const vertexRes = await axios.post(
+      VERTEX_AI_URL,
       {
         model: env.MODEL_NAME,
         messages,
@@ -93,19 +128,21 @@ export async function handleChat(
       },
       {
         headers: {
-          Authorization: `Bearer ${env.OPENAI_API_KEY}`,
+          Authorization: `Bearer ${accessToken.token}`,
           "Content-Type": "application/json"
         }
       }
     );
 
-    const reply = openaiRes.data.choices?.[0]?.message?.content?.trim() || "";
+    const reply = vertexRes.data.choices?.[0]?.message?.content?.trim() || "";
 
     res.json({ reply });
   } catch (err: any) {
     console.error("[chat] error", {
       sessionId: body.sessionId,
       clientId: body.clientId,
+      status: err.response?.status,
+      data: err.response?.data,
       error: err.message
     });
     res.status(500).json({ error: "Chat error" });
