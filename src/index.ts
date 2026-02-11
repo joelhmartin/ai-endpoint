@@ -3,7 +3,7 @@ import cors from "cors";
 
 import { handleChat } from "./chat";
 import { handleLead } from "./lead";
-import { initCTMClients } from "./ctmClients";
+import { loadCTMClients } from "./ctmClients";
 import { initRagCorpora } from "./ragCorpusStore";
 import {
   handleCreateCorpus,
@@ -40,17 +40,18 @@ app.use((req, res) => {
 const port = process.env.PORT || 8080;
 
 (async () => {
-  try {
-    await initCTMClients();
-  } catch (err) {
-    console.error("[CTM] Failed to initialise CTM clients:", err);
+  const [ctmResult, ragResult] = await Promise.allSettled([
+    loadCTMClients(),
+    initRagCorpora(),
+  ]);
+
+  if (ctmResult.status === "rejected") {
+    console.error("[CTM] Failed to initialise CTM clients:", ctmResult.reason);
     process.exit(1);
   }
 
-  try {
-    await initRagCorpora();
-  } catch (err) {
-    console.error("[RAG] init failed (non-fatal):", err);
+  if (ragResult.status === "rejected") {
+    console.error("[RAG] init failed (non-fatal):", ragResult.reason);
   }
 
   app.listen(port, () => console.log("Cloud Run backend running on port", port));

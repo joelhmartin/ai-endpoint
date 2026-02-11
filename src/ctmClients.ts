@@ -1,9 +1,10 @@
 /**
  * Dynamic CTM account registry.
  *
- * On startup, fetches every active sub-account from the CTM Agency API,
- * ensures each one has an "Ai Chat Lead" formreactor and a
- * "chat_transcription" custom field, then exposes a simple lookup map.
+ * On startup, fetches every active sub-account from the CTM Agency API
+ * and loads any that already have an "Ai Chat Lead" FormReactor.
+ * Accounts without a FormReactor are skipped — they will be lazily
+ * initialised the first time a lead is submitted via ensureClient().
  *
  * All API calls use the single agency-level Basic auth header.
  */
@@ -41,7 +42,7 @@ export function getName(accountId: string): string {
 
 export const CTMClients = { getClient, getAuthHeader, getName };
 
-// ── Startup initialisation ──────────────────────────────────────────
+// ── Internal helpers ────────────────────────────────────────────────
 
 interface CTMAccount {
   id: number;
@@ -130,23 +131,102 @@ async function ensureCustomField(accountId: number): Promise<void> {
   console.log(`[CTM] Created chat_transcription custom field for account ${accountId}`);
 }
 
-export async function initCTMClients(): Promise<void> {
+// ── Read-only startup: load existing FormReactors ───────────────────
+
+const BATCH_SIZE = 5;
+
+async function loadAccount(acct: CTMAccount): Promise<void> {
+  const id = String(acct.id);
+
+  // Only READ — check if formreactor already exists
+  const { data: frData } = await axios.get(
+    `${CTM_API}/accounts/${acct.id}/form_reactors`,
+    { headers: authHeaders }
+  );
+  const existing = (frData.form_reactors ?? []).find(
+    (fr: { name: string }) => fr.name === "Ai Chat Lead"
+  );
+
+  if (!existing) return; // Skip — will be lazily created if needed
+
+  CLIENTS[id] = { name: acct.name, formreactorId: existing.id as string };
+  console.log(`[CTM]  ✓ ${id} ${acct.name} → ${existing.id}`);
+}
+
+export async function loadCTMClients(): Promise<void> {
   console.log("[CTM] Fetching accounts from agency API…");
   const accounts = await fetchAllAccounts();
   console.log(`[CTM] Found ${accounts.length} active accounts`);
 
+  // Cache account names so ensureClient() can look them up later
   for (const acct of accounts) {
-    const id = String(acct.id);
-    try {
-      const formreactorId = await ensureFormreactor(acct.id);
-      await ensureCustomField(acct.id);
-      CLIENTS[id] = { name: acct.name, formreactorId };
-      console.log(`[CTM]  ✓ ${id} ${acct.name} → ${formreactorId}`);
-    } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      console.error(`[CTM]  ✗ ${id} ${acct.name}: ${msg}`);
+    accountNameCache[String(acct.id)] = acct.name;
+  }
+
+  for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+    const batch = accounts.slice(i, i + BATCH_SIZE);
+    const results = await Promise.allSettled(
+      batch.map((acct) => loadAccount(acct))
+    );
+    for (let j = 0; j < results.length; j++) {
+      if (results[j].status === "rejected") {
+        const acct = batch[j];
+        const reason = (results[j] as PromiseRejectedResult).reason;
+        const msg = reason instanceof Error ? reason.message : String(reason);
+        console.error(`[CTM]  ✗ ${acct.id} ${acct.name}: ${msg}`);
+      }
     }
   }
 
-  console.log(`[CTM] Loaded ${Object.keys(CLIENTS).length} accounts`);
+  console.log(`[CTM] Loaded ${Object.keys(CLIENTS).length} accounts (read-only, no new FormReactors created)`);
+}
+
+// ── Lazy per-account initialisation with locking ────────────────────
+
+const initLocks = new Map<string, Promise<void>>();
+
+/** Cache of account names fetched during loadCTMClients */
+let accountNameCache: Record<string, string> = {};
+
+/**
+ * Ensures the given account has a FormReactor + custom field ready.
+ * Returns immediately if already loaded. Uses a per-account lock to
+ * prevent concurrent creation (race condition on multi-instance deploy).
+ */
+export async function ensureClient(accountId: string): Promise<CTMClient> {
+  if (CLIENTS[accountId]) return CLIENTS[accountId];
+
+  if (!initLocks.has(accountId)) {
+    initLocks.set(accountId, (async () => {
+      try {
+        const numId = Number(accountId);
+        const [frId] = await Promise.all([
+          ensureFormreactor(numId),
+          ensureCustomField(numId),
+        ]);
+
+        // Use cached name if available, otherwise fetch from API
+        let name = accountNameCache[accountId] || "";
+        if (!name) {
+          try {
+            const { data } = await axios.get(
+              `${CTM_API}/accounts/${numId}`,
+              { headers: authHeaders }
+            );
+            name = data.name || "";
+          } catch {
+            name = `Account ${accountId}`;
+          }
+        }
+
+        CLIENTS[accountId] = { name, formreactorId: frId };
+        console.log(`[CTM] Lazy-initialised ${accountId} ${name} → ${frId}`);
+      } finally {
+        initLocks.delete(accountId);
+      }
+    })());
+  }
+
+  await initLocks.get(accountId);
+  return CLIENTS[accountId];
 }

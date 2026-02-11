@@ -1,124 +1,166 @@
 "use strict";
 /**
- * CTMClients helper for resolving CTM credentials by account ID.
- * Example usage:
- *   const auth = CTMClients.getAuthHeader("412986");
- *   const client = CTMClients.getClient("412986");
+ * Dynamic CTM account registry.
+ *
+ * On startup, fetches every active sub-account from the CTM Agency API
+ * and loads any that already have an "Ai Chat Lead" FormReactor.
+ * Accounts without a FormReactor are skipped — they will be lazily
+ * initialised the first time a lead is submitted via ensureClient().
+ *
+ * All API calls use the single agency-level Basic auth header.
  */
+var __importDefault = (this && this.__importDefault) || function (mod) {
+    return (mod && mod.__esModule) ? mod : { "default": mod };
+};
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.CTMClients = exports.CLIENTS = void 0;
+exports.CTMClients = void 0;
 exports.getClient = getClient;
 exports.getAuthHeader = getAuthHeader;
 exports.getName = getName;
-/** Map of CTM account IDs → { name, auth } */
-const CLIENTS_MAP = {
-    "267834": {
-        name: "Anchor Corps",
-        auth: "Basic YTI2NzgzNGQwOTA5ZDk1YTVjYjZhMjhmNGI5MDY4Nzg2M2FmNDE5YTpkN2NlYjRiY2M0ZGM1ZWMxNWQ3MzFkMWM3MDY1ZjE5YjllZjM=",
-        formreactorId: "FRT472ABB2C5B9B141A8D750AFED94944EA4796FD5ABB17169F134C973BABDC5351"
-    },
-    "436486": {
-        name: "TMJ Cleveland",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJCLEVELAND",
-        formreactorId: "FR_TMJCLEVELAND"
-    },
-    "366050": {
-        name: "TMJ Reno",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJRENO",
-        formreactorId: "FR_TMJRENO"
-    },
-    "412986": {
-        name: "TMJ SoCal",
-        auth: "Basic YTQxMjk4NmQzYWYzMGUwNGVlNTgxM2Q5MWFhNTNhMzk4NWIwYWU3MTo5OTA0MzIzMTQwOTE4MDFkZWY5M2VlMjlmZWQ2NTdiMDI2MjQ=",
-        formreactorId: "FR_TMJSOCAL"
-    },
-    "431875": {
-        name: "TMJ Therapy Sleep Solution",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJTHPSLEEP",
-        formreactorId: "FR_TMJTHPSLEEP"
-    },
-    "447463": {
-        name: "TMJ Pittsburgh",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJPGH",
-        formreactorId: "FR_TMJPGH"
-    },
-    "454459": {
-        name: "TMJ of Los Angeles & Conejo Valley",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJLA_CONEJO",
-        formreactorId: "FR_TMJLA_CONEJO"
-    },
-    "461678": {
-        name: "TMJ New England",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJNEWENGLAND",
-        formreactorId: "FR_TMJNEWENGLAND"
-    },
-    "472670": {
-        name: "TMJ NOLA",
-        auth: "Basic YTQ3MjY3MGQyNmZjMjBhMWU4ZjQ1MmQ4ZDY4ZDBiNDMyMzhjNDc3MzozZDMyMTNlN2RlMzAxZmIyNjBlY2M0YjQwM2I0ZDRhYTgxM2I=",
-        formreactorId: "FRT472ABB2C5B9B141AEBD8435F9615D3D26DDB5C5B06F2E760F3106C4D80BDD3E0"
-    },
-    "472688": {
-        name: "TMJ Arizona",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJAZ",
-        formreactorId: "FR_TMJAZ"
-    },
-    "474470": {
-        name: "TMJ Montana",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJMT",
-        formreactorId: "FR_TMJMT"
-    },
-    "477293": {
-        name: "TMJ Ontario",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJON",
-        formreactorId: "FR_TMJON"
-    },
-    "486104": {
-        name: "South Shore TMJ",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_SOUTHSHORETMJ",
-        formreactorId: "FR_SOUTHSHORETMJ"
-    },
-    "517297": {
-        name: "TMJ St. Louis",
-        auth: "Basic YTUxNzI5N2Q0YmNjZDczMTFkNGI1NTNkYWQ2MmE2YWNmODVhOTBjYzo5Nzk3MzQxNzc5MmZlNDM1YWMxMmU1ZDg4MzIwZGJmYzY5M2E=",
-        formreactorId: "FR_TMJSTL"
-    },
-    "534930": {
-        name: "TMJ Gorge",
-        auth: "Basic YTUzNDkzMGQ4ZTg4YjAyNGFmMDFjNTc0MGI4NGVkZWZjMzMxNzA5Mzo5ODg1NTQ4Zjc3NWU1NzE2ZTUyYWE4ZWQ3ZDMwMjAzNTJjOWY=",
-        formreactorId: "FR_TMJGORGE"
-    },
-    "536601": {
-        name: "TMJ Vegas",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJVEGAS",
-        formreactorId: "FR_TMJVEGAS"
-    },
-    "543831": {
-        name: "TMJ Utah",
-        auth: "Basic YTU0MzgzMWRmMGZhYjM1ZTZhZmJmN2VkYmZkNmU3ODczZDM5YmYzNToxNmQzZDVkYTE4NTc2YWU0Y2EyZDE2ZGM2NTIyYTEzOTUxZGE=",
-        formreactorId: "FR_TMJUTAH"
-    },
-    "557310": {
-        name: "TMJ NorCal",
-        auth: "Basic YOUR_BASE64_TOKEN_FOR_TMJNORCAL",
-        formreactorId: "FR_TMJNORCAL"
-    }
+exports.loadCTMClients = loadCTMClients;
+exports.ensureClient = ensureClient;
+const axios_1 = __importDefault(require("axios"));
+const env_1 = require("./env");
+const CTM_API = "https://api.calltrackingmetrics.com/api/v1";
+const authHeaders = {
+    Authorization: env_1.CTM_AUTH_HEADER,
+    "Content-Type": "application/json",
 };
-exports.CLIENTS = CLIENTS_MAP;
+const CLIENTS = {};
 function getClient(accountId) {
-    return exports.CLIENTS[accountId] || null;
+    return CLIENTS[accountId] || null;
 }
-function getAuthHeader(accountId) {
-    const client = getClient(accountId);
-    if (!client || !client.auth)
-        return "";
-    return client.auth;
+function getAuthHeader() {
+    return env_1.CTM_AUTH_HEADER;
 }
 function getName(accountId) {
-    const client = getClient(accountId);
-    return client?.name || "";
+    return CLIENTS[accountId]?.name || "";
 }
-exports.CTMClients = {
-    getClient,
-    getAuthHeader,
-    getName
-};
+exports.CTMClients = { getClient, getAuthHeader, getName };
+async function fetchAllAccounts() {
+    const accounts = [];
+    let page = 1;
+    let totalPages = 1;
+    while (page <= totalPages) {
+        const { data } = await axios_1.default.get(`${CTM_API}/accounts`, {
+            headers: authHeaders,
+            params: { page },
+        });
+        const items = data.accounts ?? [];
+        accounts.push(...items);
+        totalPages = data.total_pages ?? 1;
+        page++;
+    }
+    return accounts.filter((a) => a.status === "active");
+}
+async function ensureFormreactor(accountId) {
+    // Check for existing "Ai Chat Lead" formreactor
+    const { data: frData } = await axios_1.default.get(`${CTM_API}/accounts/${accountId}/form_reactors`, { headers: authHeaders });
+    const existing = (frData.form_reactors ?? []).find((fr) => fr.name === "Ai Chat Lead");
+    if (existing)
+        return existing.id;
+    // Need to create — grab the first tracking number for this account
+    const { data: numData } = await axios_1.default.get(`${CTM_API}/accounts/${accountId}/numbers.json`, { headers: authHeaders });
+    const numbers = numData.numbers ?? [];
+    if (numbers.length === 0) {
+        throw new Error(`Account ${accountId} has no tracking numbers — cannot create formreactor`);
+    }
+    const { data: created } = await axios_1.default.post(`${CTM_API}/accounts/${accountId}/form_reactors`, {
+        name: "Ai Chat Lead",
+        virtual_phone_number_id: numbers[0].id,
+        log_form_entry_only: true,
+        include_name: true,
+        include_email: true,
+    }, { headers: authHeaders });
+    console.log(`[CTM] Created formreactor for account ${accountId}:`, created.id);
+    return created.id;
+}
+async function ensureCustomField(accountId) {
+    const { data: cfData } = await axios_1.default.get(`${CTM_API}/accounts/${accountId}/custom_fields`, { headers: authHeaders });
+    const existing = (cfData.custom_fields ?? []).find((cf) => cf.api_name === "chat_transcription");
+    if (existing)
+        return;
+    await axios_1.default.post(`${CTM_API}/accounts/${accountId}/custom_fields`, {
+        name: "Chat Transcription",
+        api_name: "chat_transcription",
+        field_type: "textarea",
+        object_type: "Call",
+    }, { headers: authHeaders });
+    console.log(`[CTM] Created chat_transcription custom field for account ${accountId}`);
+}
+// ── Read-only startup: load existing FormReactors ───────────────────
+const BATCH_SIZE = 5;
+async function loadAccount(acct) {
+    const id = String(acct.id);
+    // Only READ — check if formreactor already exists
+    const { data: frData } = await axios_1.default.get(`${CTM_API}/accounts/${acct.id}/form_reactors`, { headers: authHeaders });
+    const existing = (frData.form_reactors ?? []).find((fr) => fr.name === "Ai Chat Lead");
+    if (!existing)
+        return; // Skip — will be lazily created if needed
+    CLIENTS[id] = { name: acct.name, formreactorId: existing.id };
+    console.log(`[CTM]  ✓ ${id} ${acct.name} → ${existing.id}`);
+}
+async function loadCTMClients() {
+    console.log("[CTM] Fetching accounts from agency API…");
+    const accounts = await fetchAllAccounts();
+    console.log(`[CTM] Found ${accounts.length} active accounts`);
+    // Cache account names so ensureClient() can look them up later
+    for (const acct of accounts) {
+        accountNameCache[String(acct.id)] = acct.name;
+    }
+    for (let i = 0; i < accounts.length; i += BATCH_SIZE) {
+        const batch = accounts.slice(i, i + BATCH_SIZE);
+        const results = await Promise.allSettled(batch.map((acct) => loadAccount(acct)));
+        for (let j = 0; j < results.length; j++) {
+            if (results[j].status === "rejected") {
+                const acct = batch[j];
+                const reason = results[j].reason;
+                const msg = reason instanceof Error ? reason.message : String(reason);
+                console.error(`[CTM]  ✗ ${acct.id} ${acct.name}: ${msg}`);
+            }
+        }
+    }
+    console.log(`[CTM] Loaded ${Object.keys(CLIENTS).length} accounts (read-only, no new FormReactors created)`);
+}
+// ── Lazy per-account initialisation with locking ────────────────────
+const initLocks = new Map();
+/** Cache of account names fetched during loadCTMClients */
+let accountNameCache = {};
+/**
+ * Ensures the given account has a FormReactor + custom field ready.
+ * Returns immediately if already loaded. Uses a per-account lock to
+ * prevent concurrent creation (race condition on multi-instance deploy).
+ */
+async function ensureClient(accountId) {
+    if (CLIENTS[accountId])
+        return CLIENTS[accountId];
+    if (!initLocks.has(accountId)) {
+        initLocks.set(accountId, (async () => {
+            try {
+                const numId = Number(accountId);
+                const [frId] = await Promise.all([
+                    ensureFormreactor(numId),
+                    ensureCustomField(numId),
+                ]);
+                // Use cached name if available, otherwise fetch from API
+                let name = accountNameCache[accountId] || "";
+                if (!name) {
+                    try {
+                        const { data } = await axios_1.default.get(`${CTM_API}/accounts/${numId}`, { headers: authHeaders });
+                        name = data.name || "";
+                    }
+                    catch {
+                        name = `Account ${accountId}`;
+                    }
+                }
+                CLIENTS[accountId] = { name, formreactorId: frId };
+                console.log(`[CTM] Lazy-initialised ${accountId} ${name} → ${frId}`);
+            }
+            finally {
+                initLocks.delete(accountId);
+            }
+        })());
+    }
+    await initLocks.get(accountId);
+    return CLIENTS[accountId];
+}

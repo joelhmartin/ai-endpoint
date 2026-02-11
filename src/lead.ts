@@ -2,6 +2,7 @@ import { Request, Response } from "express";
 import { LeadPayload } from "./types";
 import { env } from "./env";
 import { createChatLead, updateChatTranscript } from "./ctm";
+import { ensureClient } from "./ctmClients";
 import { getTrackback } from "./sessionStore";
 
 type LeadRequestBody = LeadPayload;
@@ -25,6 +26,9 @@ export async function handleLead(
 
   try {
     if (isLeadPayload) {
+      // Lazy-init: ensure FormReactor + custom field exist for this account
+      await ensureClient(body.clientId);
+
       const result = await createChatLead(body.clientId, {
         sessionId: body.sessionId,
         name: body.name!,

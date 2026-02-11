@@ -3,6 +3,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.handleLead = handleLead;
 const env_1 = require("./env");
 const ctm_1 = require("./ctm");
+const ctmClients_1 = require("./ctmClients");
 const sessionStore_1 = require("./sessionStore");
 async function handleLead(req, res) {
     const body = req.body;
@@ -16,6 +17,8 @@ async function handleLead(req, res) {
     const isTranscriptUpdate = Boolean(body.transcript && !isLeadPayload);
     try {
         if (isLeadPayload) {
+            // Lazy-init: ensure FormReactor + custom field exist for this account
+            await (0, ctmClients_1.ensureClient)(body.clientId);
             const result = await (0, ctm_1.createChatLead)(body.clientId, {
                 sessionId: body.sessionId,
                 name: body.name,
