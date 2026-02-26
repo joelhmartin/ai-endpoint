@@ -75,7 +75,7 @@ async function ensureFormreactor(accountId: number): Promise<string> {
     `${CTM_API}/accounts/${accountId}/form_reactors`,
     { headers: authHeaders }
   );
-  const existing = (frData.form_reactors ?? []).find(
+  const existing = (frData.forms ?? frData.form_reactors ?? []).find(
     (fr: { name: string }) => fr.name === "Ai Chat Lead"
   );
   if (existing) return existing.id as string;
@@ -104,8 +104,9 @@ async function ensureFormreactor(accountId: number): Promise<string> {
     { headers: authHeaders }
   );
 
-  console.log(`[CTM] Created formreactor for account ${accountId}:`, created.id);
-  return created.id as string;
+  const frId = created.form_reactor?.id ?? created.id;
+  console.log(`[CTM] Created formreactor for account ${accountId}:`, frId);
+  return frId as string;
 }
 
 async function ensureCustomField(accountId: number): Promise<void> {
@@ -143,7 +144,7 @@ async function loadAccount(acct: CTMAccount): Promise<void> {
     `${CTM_API}/accounts/${acct.id}/form_reactors`,
     { headers: authHeaders }
   );
-  const existing = (frData.form_reactors ?? []).find(
+  const existing = (frData.forms ?? frData.form_reactors ?? []).find(
     (fr: { name: string }) => fr.name === "Ai Chat Lead"
   );
 
