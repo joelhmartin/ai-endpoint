@@ -100,6 +100,14 @@ async function ensureFormreactor(accountId: number): Promise<string> {
       log_form_entry_only: true,
       include_name: true,
       include_email: true,
+      custom_fields: [
+        {
+          name: "chat_transcription",
+          type: "textarea",
+          required: false,
+          log_visible: true,
+        },
+      ],
     },
     { headers: authHeaders }
   );

@@ -77,30 +77,31 @@ export async function createChatLead(clientId: string, args: CreateLeadArgs) {
   const { client, authHeader } = getClientAuth(clientId);
   const url = buildFormreactorUrl(client.formreactorId);
 
-  const payload = new URLSearchParams();
-  payload.set("phone_number", formatPhoneNumber(args.phone));
-  payload.set("country_code", "1");
-  payload.set("caller_name", args.name);
-  payload.set("email", args.email);
+  // Send all fields — including transcript — in a single formreactor submission.
+  // Custom fields use the `custom_` prefix at the top level (per CTM FormReactor API).
+  const body: Record<string, string> = {
+    phone_number: formatPhoneNumber(args.phone),
+    country_code: "1",
+    caller_name: args.name,
+    email: args.email,
+  };
+  if (args.transcript) {
+    body.custom_chat_transcription = args.transcript;
+  }
 
-  const response = await axios.post(url, payload, {
+  const response = await axios.post(url, JSON.stringify(body), {
     headers: {
       Authorization: authHeader,
-      "Content-Type": "application/x-www-form-urlencoded",
+      "Content-Type": "application/json",
     },
   });
 
   const trackbackId = response.data?.trackback_id || response.data?.id || null;
   if (trackbackId) {
-    let callId: string | undefined = await lookupCallId(clientId, trackbackId, authHeader);
-    if (callId) {
-      await updateCallCustomTranscript(clientId, callId, args.transcript || "", authHeader);
-    }
-
     saveTrackback(args.sessionId, {
       clientId,
       trackbackId,
-      callId,
+      callId: undefined,
       createdAt: new Date().toISOString(),
     });
   }
